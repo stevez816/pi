@@ -747,6 +747,7 @@ for await (const line of createInterface({ input: process.stdin })) {
 });
 
 describe("MCP servers section", () => {
+	const discoveryTools = ["codemode", "tool_search"];
 	const server = (name: string, description?: string, exposure?: "codemode" | "deferred" | "direct") => ({
 		entry: {
 			name,
@@ -756,23 +757,26 @@ describe("MCP servers section", () => {
 	});
 
 	it("lists servers with how their tools are reached and the first line of their description", () => {
-		const section = renderServersSection([
-			server("docs", "Docs search.\nMore."),
-			server("later", undefined, "deferred"),
-			server("direct", "Declared.", "direct"),
-			{ entry: server("plain").entry, connection: { instructions: "From instructions." } },
-		]);
+		const section = renderServersSection(
+			[
+				server("docs", "Docs search.\nMore."),
+				server("later", undefined, "deferred"),
+				server("direct", "Declared.", "direct"),
+				{ entry: server("plain").entry, connection: { instructions: "From instructions." } },
+			],
+			discoveryTools,
+		);
 		expect(section?.split("\n").slice(1)).toEqual([
 			"- mcp__docs (codemode): Docs search.",
 			"- mcp__later (tool_search)",
 			"- mcp__plain (codemode): From instructions.",
 		]);
-		expect(renderServersSection([server("direct", "Declared.", "direct")])).toBeUndefined();
+		expect(renderServersSection([server("direct", "Declared.", "direct")], discoveryTools)).toBeUndefined();
 	});
 
 	it("shortens descriptions to fit the size limit", () => {
 		const servers = Array.from({ length: 40 }, (_, index) => server(`server${index}`, "x".repeat(400)));
-		const section = renderServersSection(servers) ?? "";
+		const section = renderServersSection(servers, discoveryTools) ?? "";
 		expect(section.length).toBeLessThanOrEqual(MAX_SERVERS_SECTION_CHARS);
 		expect(section.split("\n")).toHaveLength(41);
 		expect(section).toContain("- mcp__server39 (codemode): x");
@@ -780,7 +784,7 @@ describe("MCP servers section", () => {
 
 	it("leaves out the last servers when their names alone do not fit", () => {
 		const servers = Array.from({ length: 200 }, (_, index) => server(`server-with-a-long-name-${index}`, "desc"));
-		const section = renderServersSection(servers) ?? "";
+		const section = renderServersSection(servers, discoveryTools) ?? "";
 		expect(section.length).toBeLessThanOrEqual(MAX_SERVERS_SECTION_CHARS);
 		const lines = section.split("\n");
 		expect(lines.at(-1)).toMatch(/^- … \d+ more servers; find their tools with searchTools\(\)$/);

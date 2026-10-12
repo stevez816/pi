@@ -190,20 +190,27 @@ function serverSummary(server: McpServerListing): string {
 /**
  * The `mcp_servers` section: every enabled server with codemode or deferred tools, with how its
  * tools are reached and a one-line summary. The model learns of the servers from it, since neither
- * codemode nor tool_search lists them. Undefined when there are no such servers.
+ * codemode nor tool_search lists them. Undefined when there are no such servers or discovery tools.
  */
-export function renderServersSection(servers: readonly McpServerListing[]): string | undefined {
+export function renderServersSection(
+	servers: readonly McpServerListing[],
+	discoveryTools: readonly string[],
+): string | undefined {
+	const hasCodemode = discoveryTools.includes(CODEMODE_TOOL_NAME);
+	const hasToolSearch = discoveryTools.includes(TOOL_SEARCH_TOOL_NAME);
+	if (!hasCodemode && !hasToolSearch) return undefined;
 	const listed = servers
 		.filter((server) => isEnabled(server) && hasIndirectTools(server.entry))
 		.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
 	if (listed.length === 0) return undefined;
 	const reaches = listed.map((server) =>
-		configuredExposures(server.entry).has("codemode") ? "codemode" : "tool_search",
+		hasCodemode && (configuredExposures(server.entry).has("codemode") || !hasToolSearch) ? "codemode" : "tool_search",
 	);
 	const intro = serversSectionIntro(new Set(reaches));
 	const heads = listed.map((server, index) => `- ${mcpNamespace(server.entry.name)} (${reaches[index]})`);
+	const search = reaches.includes("codemode") ? "searchTools()" : "`tool_search`";
 	const omitted = (count: number) =>
-		count > 0 ? [`- … ${count} more server${count === 1 ? "" : "s"}; find their tools with searchTools()`] : [];
+		count > 0 ? [`- … ${count} more server${count === 1 ? "" : "s"}; find their tools with ${search}`] : [];
 	// Characters of the intro, the first `kept` server lines without descriptions, and the omission line.
 	const size = (kept: number) => [intro, ...heads.slice(0, kept), ...omitted(listed.length - kept)].join("\n").length;
 	let kept = listed.length;
@@ -1174,8 +1181,23 @@ export function createMcpExtension(options: McpExtensionOptions = {}): Extension
 		// appends the section to the conversation when it changed, for example after a server connected.
 		pi.on("before_agent_start", async (event, ctx) => {
 			await waitForDirectServers(ctx);
-			const { sections } = event.systemPromptOptions;
-			const section = renderServersSection(servers);
+			const { sections, selectedTools } = event.systemPromptOptions;
+			const tools = pi.getAllTools();
+			const discoveryTools = tools
+				.filter((tool) => selectedTools.includes(tool.name) && (isCodemodeTool(tool) || isToolSearchTool(tool)))
+				.map((tool) => tool.name);
+			const indirectTools = tools.filter((tool) => tool.exposure === "codemode" || tool.exposure === "deferred");
+			const withResources = serversWithResources();
+			const listed = servers.filter((server) => {
+				const offered = serverTools.get(server.entry.name);
+				// Until discovery finishes, keep listing the server from its config without waiting for it.
+				if (!offered) return true;
+				return indirectTools.some(
+					(tool) =>
+						offered.has(tool.name) || (RESOURCE_TOOL_NAMES.has(tool.name) && withResources.includes(server)),
+				);
+			});
+			const section = renderServersSection(listed, discoveryTools);
 			if (section) sections[MCP_SERVERS_SECTION] = section;
 			else delete sections[MCP_SERVERS_SECTION];
 		});

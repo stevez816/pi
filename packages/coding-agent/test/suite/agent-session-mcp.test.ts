@@ -322,6 +322,64 @@ describe("AgentSession MCP integration", () => {
 		expect(registered).not.toContain("mcp__docs__fail");
 	});
 
+	// Regression: #10635.
+	it.each([
+		{ flags: "--no-tools", allowedToolNames: [], activeTools: [], keepsMcpTools: false },
+		{
+			flags: "--exclude-tools 'mcp__*'",
+			excludedToolNames: ["mcp__*"],
+			activeTools: ["codemode"],
+			keepsMcpTools: false,
+		},
+		{ flags: "-t read", allowedToolNames: ["read"], activeTools: ["read"], keepsMcpTools: true },
+	])(
+		"omits the MCP servers section with $flags",
+		async ({ allowedToolNames, excludedToolNames, activeTools, keepsMcpTools }) => {
+			const { harness, notifications } = await setup("codemode", undefined, {
+				allowedToolNames,
+				excludedToolNames,
+				waitForTools: false,
+			});
+			// The plain /mcp command waits for startup even when every MCP tool is filtered out.
+			await harness.session.prompt("/mcp");
+			expect(notifications).toContainEqual(expect.stringContaining("docs: connected"));
+			expect(harness.session.getActiveToolNames()).toEqual(activeTools);
+			expect(harness.session.getAllTools().some((tool) => tool.name === "mcp__docs__search")).toBe(keepsMcpTools);
+			harness.setResponses([fauxAssistantMessage("done")]);
+
+			await harness.session.prompt("go");
+
+			expect(serversSection(harness)).toBeUndefined();
+		},
+	);
+
+	// Regression: #10635.
+	it.each(["direct", "codemode"] as const)(
+		"lists only allowed MCP servers when the other server is %s",
+		async (exposure) => {
+			const { harness, notifications } = await setup("codemode", undefined, {
+				allowedToolNames: ["read", "codemode", "mcp__other__*"],
+				waitForTools: false,
+				extensionFactories: [(pi) => pi.registerMcpServer("other", { url: "http://unused.invalid", exposure })],
+			});
+			await harness.session.prompt("/mcp");
+			expect(notifications).toContainEqual(expect.stringContaining("docs: connected"));
+			expect(notifications).toContainEqual(expect.stringContaining("other: connected"));
+			expect(harness.session.getActiveToolNames()).toContain("codemode");
+			const registered = harness.session.getAllTools().map((tool) => tool.name);
+			expect(registered).not.toContain("mcp__docs__search");
+			expect(registered).toContain("mcp__other__search");
+			harness.setResponses([fauxAssistantMessage("done")]);
+
+			await harness.session.prompt("go");
+
+			const section = serversSection(harness);
+			expect(section ?? "").not.toContain("mcp__docs");
+			if (exposure === "codemode") expect(section).toContain("- mcp__other (codemode)");
+			else expect(section).toBeUndefined();
+		},
+	);
+
 	it("exposes codemode-only MCP tools through codemode and hides them from the model", async () => {
 		const { harness, calls } = await setup("codemode");
 		const searchName = createMcpToolName("docs", "search");
