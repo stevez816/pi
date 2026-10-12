@@ -42,6 +42,7 @@ import type {
 	ToolNamespace,
 } from "../../core/extensions/types.ts";
 import type { ModelRegistry } from "../../core/model-registry.ts";
+import { SETTINGS_DEFAULTS } from "../../core/settings-defaults.ts";
 import type { CodemodeMode } from "../../core/settings-manager.ts";
 import { wrapToolDefinition } from "../../core/tools/tool-definition-wrapper.ts";
 import { loadCodemodeExecutor } from "./execute.lazy.ts";
@@ -135,7 +136,7 @@ export const codemodeToolSystemPromptContribution = {
 export const CODEMODE_DOCS_PATH = join(getDocsPath(), "codemode.md");
 
 const DESCRIPTION_INTRO = `Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level \`await\` and \`return\` work. No Node, file system, network, or timers.
-- \`await tools.<name>({ ...args })\` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. Calls still running when the script ends are cancelled.
+- \`await tools.<name>({ ...args })\` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.
 - Optional first line: \`// @options: {"max_output_tokens": 10000, "timeout_ms": 60000}\``;
 
 /** One line per global. The details live in {@link CODEMODE_DOCS_PATH}. */
@@ -153,7 +154,7 @@ function describeGlobals(models: boolean): string {
 }
 
 /** Default for {@link CodemodeDescriptionOptions.inlineBudget}, in estimated tokens. */
-export const DEFAULT_CODEMODE_INLINE_BUDGET = 3000;
+export const DEFAULT_CODEMODE_INLINE_BUDGET = SETTINGS_DEFAULTS.codemode.inlineBudget;
 /** Characters per token when estimating the cost of a tool section. */
 const CHARS_PER_TOKEN = 4;
 
@@ -340,7 +341,7 @@ function describeScriptCall(tool: AgentTool<any>): string {
  * `tool_search` loads a tool, so loads do not redeclare codemode.
  */
 function prepareCodemodeLoadout(loadout: ToolLoadout, options: CodemodeToolOptions): ToolLoadoutChanges {
-	const mode = options.getMode?.() ?? "on";
+	const mode = options.getMode?.() ?? SETTINGS_DEFAULTS.codemode.mode;
 	const isDirect = (tool: AgentTool) => loadout.getExposure(tool.name) === "direct";
 	const callable = getCodemodeCallableTools(loadout.callable);
 	const callableNames = new Set(callable.map((tool) => tool.name));
