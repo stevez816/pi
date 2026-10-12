@@ -111,7 +111,7 @@ export interface CreateAgentSessionResult {
 	session: AgentSession;
 	/** Extensions result (for UI context setup in interactive mode) */
 	extensionsResult: LoadExtensionsResult;
-	/** Warning if session was restored with a different model than saved */
+	/** Warning if the saved session model or settings default could not be used */
 	modelFallbackMessage?: string;
 }
 
@@ -247,6 +247,8 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 			modelFallbackMessage = formatNoModelsAvailableMessage();
 		} else if (modelFallbackMessage) {
 			modelFallbackMessage += `. Using ${model.provider}/${model.id}`;
+		} else {
+			modelFallbackMessage = result.fallbackMessage;
 		}
 	}
 

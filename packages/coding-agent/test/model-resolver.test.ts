@@ -792,7 +792,30 @@ describe("default model selection", () => {
 		expect(result.model?.id).toBe("anthropic/claude-opus-4-6");
 	});
 
-	test("findInitialModel ignores an unauthenticated saved default", async () => {
+	// Regression for #10812: provider defaults must carry the same warning as first-available fallbacks.
+	test("findInitialModel warns when a provider default replaces a missing saved model", async () => {
+		const fallback = { ...mockModels[1], id: defaultModelPerProvider.openai! };
+		const modelRuntime = {
+			getModel: () => undefined,
+			getAvailableSnapshot: () => [mockModels[0], fallback],
+		} as unknown as Parameters<typeof findInitialModel>[0]["modelRuntime"];
+
+		const result = await findInitialModel({
+			scopedModels: [],
+			isContinuing: false,
+			defaultProvider: "openai",
+			defaultModelId: "missing-model",
+			modelRuntime,
+		});
+
+		expect(result.model).toBe(fallback);
+		expect(result.fallbackMessage).toBe(
+			`Could not use default model openai/missing-model. Using ${fallback.provider}/${fallback.id}`,
+		);
+	});
+
+	// Regression for #10812: an auth-related fallback must report the model change too.
+	test("findInitialModel warns when falling back from an unauthenticated saved default", async () => {
 		const savedDeepSeekModel: Model<"anthropic-messages"> = {
 			id: "deepseek-v4-flash",
 			name: "DeepSeek V4 Flash",
@@ -829,6 +852,9 @@ describe("default model selection", () => {
 
 		expect(result.model?.provider).toBe("spark-two");
 		expect(result.model?.id).toBe("deepseek-v4-flash");
+		expect(result.fallbackMessage).toBe(
+			"Could not use default model deepseek/deepseek-v4-flash. Using spark-two/deepseek-v4-flash",
+		);
 	});
 
 	describe("persisted default model scoping", () => {

@@ -448,7 +448,8 @@ export async function createSessionManager(
 	return SessionManager.create(cwd, sessionDir, { id: parsed.sessionId });
 }
 
-function buildSessionOptions(
+/** @internal Exported for testing startup model selection. */
+export function buildSessionOptions(
 	parsed: Args,
 	scopedModels: ScopedModel[],
 	hasExistingSession: boolean,
@@ -458,10 +459,12 @@ function buildSessionOptions(
 	options: CreateAgentSessionOptions;
 	cliThinkingFromModel: boolean;
 	diagnostics: AgentSessionRuntimeDiagnostic[];
+	modelFallbackMessage?: string;
 } {
 	const options: CreateAgentSessionOptions = {};
 	const diagnostics: AgentSessionRuntimeDiagnostic[] = [];
 	let cliThinkingFromModel = false;
+	let modelFallbackMessage: string | undefined;
 
 	// Model from CLI
 	// - supports --provider <name> --model <pattern>
@@ -511,6 +514,9 @@ function buildSessionOptions(
 			}
 		} else {
 			options.model = scopedModels[0].model;
+			if (savedProvider && savedModelId && (!savedModel || !modelRuntime.hasConfiguredAuth(savedProvider))) {
+				modelFallbackMessage = `Could not use default model ${savedProvider}/${savedModelId}. Using ${options.model.provider}/${options.model.id}`;
+			}
 			// Use thinking level from first scoped model if explicitly set
 			if (!parsed.thinking && scopedModels[0].thinkingLevel) {
 				options.thinkingLevel = scopedModels[0].thinkingLevel;
@@ -549,7 +555,7 @@ function buildSessionOptions(
 		options.excludeTools = [...parsed.excludeTools];
 	}
 
-	return { options, cliThinkingFromModel, diagnostics };
+	return { options, cliThinkingFromModel, diagnostics, modelFallbackMessage };
 }
 
 function resolveCliPaths(cwd: string, paths: string[] | undefined): string[] | undefined {
@@ -818,6 +824,7 @@ export async function main(args: string[], options?: MainOptions) {
 			options: sessionOptions,
 			cliThinkingFromModel,
 			diagnostics: sessionOptionDiagnostics,
+			modelFallbackMessage: scopedModelFallbackMessage,
 		} = buildSessionOptions(
 			parsed,
 			scopedModels,
@@ -857,6 +864,7 @@ export async function main(args: string[], options?: MainOptions) {
 
 		return {
 			...created,
+			modelFallbackMessage: created.modelFallbackMessage ?? scopedModelFallbackMessage,
 			services,
 			diagnostics,
 		};
