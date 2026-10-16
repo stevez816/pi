@@ -18,6 +18,7 @@ type FakeSession = {
 	bindExtensions: ReturnType<typeof vi.fn>;
 	subscribe: ReturnType<typeof vi.fn>;
 	prompt: ReturnType<typeof vi.fn>;
+	waitForIdle: () => Promise<void>;
 	reload: ReturnType<typeof vi.fn>;
 };
 
@@ -71,6 +72,7 @@ function createRuntimeHost(assistantMessage: AssistantMessage): FakeRuntimeHost 
 		bindExtensions: vi.fn(async () => {}),
 		subscribe: vi.fn(() => () => {}),
 		prompt: vi.fn(async () => {}),
+		waitForIdle: async () => {},
 		reload: vi.fn(async () => {}),
 	};
 

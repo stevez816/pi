@@ -130,10 +130,13 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 
 		if (initialMessage) {
 			await session.prompt(initialMessage, { images: initialImages });
+			// Extension commands can return before the turn they started has settled.
+			await session.waitForIdle();
 		}
 
 		for (const message of messages) {
 			await session.prompt(message);
+			await session.waitForIdle();
 		}
 
 		if (mode === "text") {
