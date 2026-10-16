@@ -493,7 +493,8 @@ describe("AgentSession prompt characterization", () => {
 		await sawToolStart;
 
 		await expect(harness.session.prompt("second")).rejects.toThrow(
-			"Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.",
+			"Agent is already processing. To queue the message, set streamingBehavior in session.prompt() (SDK) " +
+				"or deliverAs in pi.sendUserMessage() (extensions) to 'steer' or 'followUp'.",
 		);
 
 		releaseToolExecution?.();
