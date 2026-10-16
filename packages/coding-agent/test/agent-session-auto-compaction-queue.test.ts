@@ -152,6 +152,14 @@ describe("AgentSession auto-compaction queue resume", () => {
 			errorMessage: "prompt is too long",
 			timestamp: Date.now(),
 		};
+		settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
+		sessionManager.appendMessage({
+			role: "user",
+			content: [{ type: "text", text: "message to compact" }],
+			timestamp: Date.now() - 1000,
+		});
+		sessionManager.appendMessage(overflowMessage);
+		session.agent.state.messages = sessionManager.buildSessionContext().messages;
 
 		const runAutoCompactionSpy = vi
 			.spyOn(

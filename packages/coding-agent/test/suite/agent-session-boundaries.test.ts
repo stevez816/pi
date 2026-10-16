@@ -786,7 +786,8 @@ describe("durable length recovery", () => {
 			execute: async () => ({ content: [{ type: "text", text: "done" }], details: {} }),
 		};
 		const harness = await createHarness({
-			models: [{ id: "faux-1", contextWindow: 1000, maxTokens: 100 }],
+			// Avoid threshold compaction consuming the tool turn before the second recovery.
+			models: [{ id: "faux-1", contextWindow: 128_000, maxTokens: 100 }],
 			settings: { compaction: { keepRecentTokens: 1, reserveTokens: 0 } },
 			tools: [tool],
 			extensionFactories: [
@@ -822,8 +823,14 @@ describe("durable length recovery", () => {
 					entry.type === "message" && entry.message.role === "assistant" && entry.message.stopReason === "length",
 			);
 		expect(lengthResponses).toHaveLength(2);
-		expect(omittedIds).toEqual(expect.arrayContaining(lengthResponses.map((entry) => entry.id)));
+		// #11012: no compactable history remains after the tool turn. The reset budget
+		// must not produce a retry-limit error, and the second partial reply must remain.
+		expect(omittedIds).toEqual([lengthResponses[0].id]);
+		expect(harness.eventsOfType("compaction_end")).toEqual([
+			expect.objectContaining({ result: expect.any(Object), willRetry: true }),
+		]);
 		expect(harness.faux.state.callCount).toBe(3);
+		expect(harness.session.getLastAssistantText()).toBe("second partial");
 	});
 
 	it("gives a distinct queued follow-up its own length-recovery budget", async () => {

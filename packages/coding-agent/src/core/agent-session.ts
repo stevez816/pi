@@ -1238,7 +1238,7 @@ export class AgentSession {
 		return undefined;
 	}
 
-	private _omitRecoveryAttempt(message: AssistantMessage, toolResults: AgentMessage[] = []): void {
+	private _getRecoveryOmissionTargetIds(message: AssistantMessage, toolResults: AgentMessage[] = []): string[] {
 		const targets = [message, ...toolResults];
 		const targetIds = targets.map((target) => this._findPersistedMessageEntryId(target));
 		const unresolvedProjectedTarget = targets.some(
@@ -1247,8 +1247,11 @@ export class AgentSession {
 		if (unresolvedProjectedTarget) {
 			throw new Error("Cannot persist recovery omission because a projected message has no source entry");
 		}
+		return targetIds.filter((targetId): targetId is string => targetId !== undefined);
+	}
+
+	private _omitRecoveryAttempt(targetIds: string[]): void {
 		for (const targetId of targetIds) {
-			if (!targetId) continue;
 			const editId = this.sessionManager.appendContextEdit(targetId, null);
 			const entry = this.sessionManager.getEntry(editId);
 			if (entry) this._emit({ type: "entry_appended", entry });
@@ -3068,9 +3071,17 @@ export class AgentSession {
 				return false;
 			}
 
+			// Check the history after omission without changing the session. If nothing can be
+			// compacted, retain the final attempt and leave the recovery budget available.
+			const targetIds = this._getRecoveryOmissionTargetIds(assistantMessage, toolResults);
+			const preview = this._createBoundaryPreviewManager(
+				targetIds.map((targetId) => ({ type: "context_edit", targetId, replacement: null })),
+			);
+			if (!prepareCompaction(preview.getBranch(), settings)) return false;
+
 			// Persistently omit the selected final attempt before post-run recovery compaction.
 			this._overflowRecoveryAttempted = true;
-			this._omitRecoveryAttempt(assistantMessage, toolResults);
+			this._omitRecoveryAttempt(targetIds);
 			const retry = await this._runAutoCompaction("overflow", willRetry);
 			if (retry) this._failedResponse = assistantMessage;
 			return retry;
@@ -3814,7 +3825,7 @@ export class AgentSession {
 		});
 
 		// Keep the failed attempt in raw history while durably omitting it from model projection.
-		this._omitRecoveryAttempt(message);
+		this._omitRecoveryAttempt(this._getRecoveryOmissionTargetIds(message));
 
 		// Wait with exponential backoff (abortable)
 		this._retryAbortController = new AbortController();

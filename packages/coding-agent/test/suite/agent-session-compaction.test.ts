@@ -709,6 +709,7 @@ describe("AgentSession compaction characterization", () => {
 			models: [{ id: "faux-1", contextWindow: 100, maxTokens: 100 }],
 		});
 		harnesses.push(harness);
+		seedCompactableSession(harness);
 		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
 		const lengthOverflowMessage = createAssistant(harness, {
 			stopReason: "length",
@@ -805,6 +806,7 @@ describe("AgentSession compaction characterization", () => {
 	it("does not retry overflow recovery more than once", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
+		seedCompactableSession(harness);
 		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
 		const overflowMessage = createAssistant(harness, {
 			stopReason: "error",
